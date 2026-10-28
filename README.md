@@ -1,36 +1,85 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
+# draw-tx
 
-## Getting Started
+Editor de desenho e texto em navegador, construído com Next.js e React. A aplicação permite desenhar à mão livre, inserir texto, apagar partes do desenho, desfazer/refazer ações e exportar a arte final em PNG.
 
-First, run the development server:
+## Funcionalidades
+
+- Caneta para desenhar livremente
+- Borracha para remover traços
+- Inserção de texto em qualquer ponto do canvas
+- Ajuste de espessura da linha ou tamanho do texto
+- Seleção de cores personalizadas e presets
+- Desfazer e refazer ações
+- Limpeza do canvas
+- Download da imagem em formato PNG
+
+## Tecnologias
+
+- Next.js 16
+- React 19
+- Lucide React
+- Canvas HTML
+
+## Pré-requisitos
+
+Antes de iniciar, certifique-se de ter instalado:
+
+- Node.js 18+
+- npm
+
+## Instalação
+
+```bash
+npm install
+```
+
+## Executando o projeto
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Acesse http://localhost:3000 para visualizar a aplicação.
 
-You can start editing the page by modifying `app/page.js`. The page auto-updates as you edit the file.
+## Estrutura do projeto
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```text
+.
+├── app/
+│   ├── components/
+│   │   ├── DrawingEditor.jsx
+│   │   └── DrawingEditor.css
+│   ├── globals.css
+│   ├── layout.js
+│   └── page.js
+├── public/
+├── package.json
+├── next.config.mjs
+├── jsconfig.json
+├── postcss.config.mjs
+├── eslint.config.mjs
+└── README.md
+```
 
-## Learn More
+## Como usar
 
-To learn more about Next.js, take a look at the following resources:
+1. Abra a aplicação no navegador.
+2. Selecione a ferramenta desejada na barra superior.
+3. Para desenhar, use a caneta.
+4. Para inserir texto, escolha a opção de texto e clique no canvas.
+5. Digite o texto e pressione Enter para confirmar, ou Esc para cancelar.
+6. Use os botões de desfazer/refazer para ajustar o desenho.
+7. Clique no botão de download para salvar a imagem.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Scripts disponíveis
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```bash
+npm run dev    # inicia o servidor de desenvolvimento
+npm run build  # gera a build de produção
+npm run start  # inicia a aplicação em modo produção
+npm run lint   # executa a validação do ESLint
+```
 
-## Deploy on Vercel
+## Observação
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+A lógica principal do editor fica em [app/components/DrawingEditor.jsx](app/components/DrawingEditor.jsx), onde o comportamento do canvas, histórico de ações e fluxo de texto são implementados.
