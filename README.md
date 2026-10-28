@@ -45,25 +45,6 @@ npm run dev
 
 Acesse http://localhost:3000 para visualizar a aplicação.
 
-## Estrutura do projeto
-
-```text
-.
-├── app/
-│   ├── components/
-│   │   ├── DrawingEditor.jsx
-│   │   └── DrawingEditor.css
-│   ├── globals.css
-│   ├── layout.js
-│   └── page.js
-├── public/
-├── package.json
-├── next.config.mjs
-├── jsconfig.json
-├── postcss.config.mjs
-├── eslint.config.mjs
-└── README.md
-```
 
 ## Como usar
 
@@ -75,15 +56,3 @@ Acesse http://localhost:3000 para visualizar a aplicação.
 6. Use os botões de desfazer/refazer para ajustar o desenho.
 7. Clique no botão de download para salvar a imagem.
 
-## Scripts disponíveis
-
-```bash
-npm run dev    # inicia o servidor de desenvolvimento
-npm run build  # gera a build de produção
-npm run start  # inicia a aplicação em modo produção
-npm run lint   # executa a validação do ESLint
-```
-
-## Observação
-
-A lógica principal do editor fica em [app/components/DrawingEditor.jsx](app/components/DrawingEditor.jsx), onde o comportamento do canvas, histórico de ações e fluxo de texto são implementados.
