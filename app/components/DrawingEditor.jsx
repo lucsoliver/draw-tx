@@ -44,7 +44,15 @@ export default function DrawingTextEditor() {
 
   const [editingId, setEditingId] = useState(null);
   const [nameDraft, setNameDraft] = useState('');
-  const [theme, setTheme] = useState('light');
+  const [theme, setTheme] = useState(() => {
+    if (typeof window === 'undefined') return 'light';
+    const stored = document.documentElement.dataset.theme;
+    if (stored === 'dark' || stored === 'light') return stored;
+    const saved = localStorage.getItem(THEME_KEY);
+    return saved === 'dark' || saved === 'light'
+      ? saved
+      : (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+  });
 
   const [tool, setTool] = useState('pen');
   const [color, setColor] = useState('#000000');
@@ -60,19 +68,45 @@ export default function DrawingTextEditor() {
 
   const activeTab = tabs.find((tab) => tab.id === activeId) || tabs[0];
 
-  useEffect(() => {
-    const stored = document.documentElement.dataset.theme;
-    if (stored === 'dark' || stored === 'light') {
-      setTheme(stored);
+  function saveToHistory() {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const newHistory = historyRef.current.slice(0, historyStepRef.current + 1);
+    newHistory.push(canvas.toDataURL());
+    historyRef.current = newHistory;
+    historyStepRef.current = newHistory.length - 1;
+    setHistory(newHistory);
+    setHistoryStep(newHistory.length - 1);
+  }
+
+  function restoreFromHistory(step, cb) {
+    const canvas = canvasRef.current;
+    if (!canvas) {
+      if (cb) cb();
       return;
     }
-    const saved = localStorage.getItem(THEME_KEY);
-    const next = saved === 'dark' || saved === 'light'
-      ? saved
-      : (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-    document.documentElement.dataset.theme = next;
-    setTheme(next);
-  }, []);
+    const ctx = canvas.getContext('2d');
+    const src = historyRef.current[step];
+    if (!src) {
+      if (cb) cb();
+      return;
+    }
+    const img = new Image();
+    img.src = src;
+    img.onload = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0);
+      if (cb) cb();
+    };
+    img.onerror = () => {
+      if (cb) cb();
+    };
+  }
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem(THEME_KEY, theme);
+  }, [theme]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -198,41 +232,6 @@ export default function DrawingTextEditor() {
 
     return () => cancelAnimationFrame(frame);
   }, [textInput, isTyping, textPosition, color, fontSize, historyStep]);
-
-  const saveToHistory = () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const newHistory = historyRef.current.slice(0, historyStepRef.current + 1);
-    newHistory.push(canvas.toDataURL());
-    historyRef.current = newHistory;
-    historyStepRef.current = newHistory.length - 1;
-    setHistory(newHistory);
-    setHistoryStep(newHistory.length - 1);
-  };
-
-  const restoreFromHistory = (step, cb) => {
-    const canvas = canvasRef.current;
-    if (!canvas) {
-      if (cb) cb();
-      return;
-    }
-    const ctx = canvas.getContext('2d');
-    const src = historyRef.current[step];
-    if (!src) {
-      if (cb) cb();
-      return;
-    }
-    const img = new Image();
-    img.src = src;
-    img.onload = () => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(img, 0, 0);
-      if (cb) cb();
-    };
-    img.onerror = () => {
-      if (cb) cb();
-    };
-  };
 
   const captureSnapshot = () => ({
     history: historyRef.current.slice(),
@@ -376,11 +375,7 @@ export default function DrawingTextEditor() {
   };
 
   const toggleTheme = () => {
-    const current = document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
-    const next = current === 'dark' ? 'light' : 'dark';
-    document.documentElement.dataset.theme = next;
-    localStorage.setItem(THEME_KEY, next);
-    setTheme(next);
+    setTheme((current) => (current === 'dark' ? 'light' : 'dark'));
   };
 
   const undo = () => {
