@@ -1,4 +1,8 @@
-# draw-tx
+<h1 align="center">draw-tx</h1>
+
+<br>
+<img src="public/images/draw-tx-website.png" alt="Screenshot Site" style="width:auto; height:auto;" align="center">
+<br>
 
 Editor de desenho e texto em navegador, construído com Next.js e React. A aplicação permite desenhar à mão livre, inserir texto, apagar partes do desenho, desfazer/refazer ações e exportar a arte final em PNG.
 
