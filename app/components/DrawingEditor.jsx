@@ -582,14 +582,7 @@ export default function DrawingTextEditor() {
             <Plus size={16} />
           </button>
         </div>
-        <button
-          type="button"
-          className="tool-button theme-toggle"
-          onClick={toggleTheme}
-          title={theme === 'dark' ? 'Tema claro' : 'Tema escuro'}
-        >
-          {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
-        </button>
+    
       </div>
 
       <div className="drawing-toolbar">
@@ -632,6 +625,15 @@ export default function DrawingTextEditor() {
           </button>
         </div>
 
+            <button
+          type="button"
+          className="tool-button theme-toggle"
+          onClick={toggleTheme}
+          title={theme === 'dark' ? 'Tema claro' : 'Tema escuro'}
+        >
+          {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
+        </button>
+
         <div className="settings-row">
           {tool !== 'text' && (
             <div className="setting-group">
@@ -664,7 +666,6 @@ export default function DrawingTextEditor() {
           )}
 
           <div className="color-picker-group">
-            <label className="setting-label">Cor:</label>
             <div className="color-swatches">
               {colors.map((c) => (
                 <button

@@ -100,6 +100,11 @@ html[data-theme="dark"] .drawing-editor {
   justify-content: center;
 }
 
+.theme-toggle {
+  position: absolute;
+  right: 1%;
+}
+
 .tab-icon-button {
   width: 1.4rem;
   height: 1.4rem;
@@ -191,12 +196,6 @@ html[data-theme="dark"] .drawing-editor {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-}
-
-.setting-label {
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: var(--text);
 }
 
 .setting-input {
