@@ -2,6 +2,9 @@
 
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Pencil, Type, Eraser, Trash2, Download, Undo, Redo, Plus, X, Sun, Moon, Move, MousePointer2 } from 'lucide-react';
+import EditorToolbar from './drawing-editor/EditorToolbar';
+import EditorCanvasStage from './drawing-editor/EditorCanvasStage';
+import ZoomControls from './drawing-editor/ZoomControls';
 import './DrawingEditor.css';
 
 const MAX_TABS = 3;
@@ -123,7 +126,7 @@ export default function DrawingTextEditor() {
     };
   };
 
-  const drawShape = useCallback((ctx, startPoint, endPoint, type) => {
+  const drawShape = useCallback((ctx, startPoint, endPoint, type, colorOverride = shapeColor) => {
     const startX = startPoint.x;
     const startY = startPoint.y;
     const endX = endPoint.x;
@@ -131,8 +134,8 @@ export default function DrawingTextEditor() {
     const width = endX - startX;
     const height = endY - startY;
 
-    ctx.strokeStyle = shapeColor;
-    ctx.fillStyle = shapeColor;
+    ctx.strokeStyle = colorOverride;
+    ctx.fillStyle = colorOverride;
     ctx.lineWidth = lineWidth;
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';
@@ -288,7 +291,7 @@ export default function DrawingTextEditor() {
       ctx.lineWidth = obj.lineWidth;
       ctx.lineJoin = 'round';
       ctx.lineCap = 'round';
-      drawShape(ctx, obj.start, obj.end, obj.shapeType);
+      drawShape(ctx, obj.start, obj.end, obj.shapeType, obj.color);
       ctx.strokeStyle = prevStrokeStyle;
       ctx.fillStyle = prevFillStyle;
       ctx.lineWidth = prevLineWidth;
@@ -595,6 +598,43 @@ export default function DrawingTextEditor() {
     syncSelectedInfo(id);
   }, [syncSelectedInfo]);
 
+  const applyColorChoice = useCallback((nextColor) => {
+    if (tool === 'shape') {
+      const selectedShape = selectedObjectId
+        ? objectsRef.current.find((item) => item.id === selectedObjectId && item.type === 'shape')
+        : null;
+
+      if (selectedShape) {
+        selectedShape.color = nextColor;
+        setShapeColor(nextColor);
+        syncSelectedInfo(selectedShape.id);
+        renderAllObjects();
+        saveToHistory();
+        return;
+      }
+
+      setShapeColor(nextColor);
+      return;
+    }
+
+    if (tool === 'text') {
+      const selectedText = selectedObjectId
+        ? objectsRef.current.find((item) => item.id === selectedObjectId && item.type === 'text')
+        : null;
+
+      if (selectedText) {
+        selectedText.color = nextColor;
+        setColor(nextColor);
+        syncSelectedInfo(selectedText.id);
+        renderAllObjects();
+        saveToHistory();
+        return;
+      }
+    }
+
+    setColor(nextColor);
+  }, [renderAllObjects, saveToHistory, selectedObjectId, setColor, setShapeColor, syncSelectedInfo, tool]);
+
   const removeObjectsInEraserRadius = useCallback((x, y) => {
     const radius = 16;
     const canvas = canvasRef.current;
@@ -839,9 +879,31 @@ export default function DrawingTextEditor() {
     }
   }, [isTyping, textPosition, textInput, historyStep, fontSize, color, renderAllObjects, restoreFromHistory, saveToHistory, clearSelectionState, setSelectedObject]);
 
+  const cloneTabObject = (value) => {
+    if (Array.isArray(value)) {
+      return value.map(cloneTabObject);
+    }
+
+    if (value && typeof value === 'object') {
+      return Object.fromEntries(
+        Object.entries(value).map(([key, item]) => [key, cloneTabObject(item)])
+      );
+    }
+
+    return value;
+  };
+
   const captureSnapshot = () => ({
     history: historyRef.current.slice(),
     historyStep: historyStepRef.current,
+    objects: objectsRef.current.map(cloneTabObject),
+    selectedObjectId,
+    selectionInfo: selectionInfo.object
+      ? {
+          object: cloneTabObject(selectionInfo.object),
+          bounds: selectionInfo.bounds ? { ...selectionInfo.bounds } : null,
+        }
+      : { object: null, bounds: null },
     isTyping,
     textInput,
     textPosition: textPosition ? { ...textPosition } : null,
@@ -850,6 +912,9 @@ export default function DrawingTextEditor() {
     shapeColor,
     lineWidth,
     fontSize,
+    shapeType,
+    pan: { ...pan },
+    zoom,
   });
 
   const resetCanvasToBlank = () => {
@@ -879,18 +944,32 @@ export default function DrawingTextEditor() {
     const canvas = canvasRef.current;
     if (!canvas || !snap) return;
 
+    objectsRef.current = (snap.objects || []).map(cloneTabObject);
+    setSelectedObjectId(snap.selectedObjectId ?? null);
+    setSelectionInfo(
+      snap.selectionInfo && snap.selectionInfo.object
+        ? {
+            object: cloneTabObject(snap.selectionInfo.object),
+            bounds: snap.selectionInfo.bounds ? { ...snap.selectionInfo.bounds } : null,
+          }
+        : { object: null, bounds: null }
+    );
+
     historyRef.current = snap.history;
     historyStepRef.current = snap.historyStep;
     setHistory(snap.history);
     setHistoryStep(snap.historyStep);
-    setTool(snap.tool);
+    setTool(snap.tool ?? 'pen');
     setColor(snap.color ?? '#000000');
     setShapeColor(snap.shapeColor ?? snap.color ?? '#000000');
-    setLineWidth(snap.lineWidth);
-    setFontSize(snap.fontSize);
+    setLineWidth(snap.lineWidth ?? 3);
+    setFontSize(snap.fontSize ?? 24);
+    setShapeType(snap.shapeType ?? 'rectangle');
+    setPan(snap.pan ?? { x: 0, y: 0 });
+    setZoom(snap.zoom ?? 1);
     setTextInput(snap.textInput || '');
-    setTextPosition(snap.textPosition);
-    setIsTyping(false);
+    setTextPosition(snap.textPosition ?? null);
+    setIsTyping(Boolean(snap.isTyping));
     baseImageDataRef.current = null;
     isDrawingRef.current = false;
 
@@ -899,7 +978,11 @@ export default function DrawingTextEditor() {
     ctx.fillStyle = '#FFFFFF';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     const src = snap.history[snap.historyStep];
-    if (!src) return;
+
+    if (!src) {
+      renderAllObjects();
+      return;
+    }
 
     const img = new Image();
     img.onload = () => {
@@ -907,6 +990,7 @@ export default function DrawingTextEditor() {
       ctx.globalCompositeOperation = 'source-over';
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.drawImage(img, 0, 0);
+      renderAllObjects();
       if (snap.isTyping && snap.textPosition) {
         try {
           baseImageDataRef.current = ctx.getImageData(0, 0, canvas.width, canvas.height);
@@ -1199,7 +1283,7 @@ export default function DrawingTextEditor() {
         ctx.putImageData(baseImageDataRef.current, 0, 0);
       }
       currentShapeRef.current = { start: shapeStartRef.current, end: { x, y } };
-      drawShape(ctx, shapeStartRef.current, { x, y }, shapeType);
+      drawShape(ctx, shapeStartRef.current, { x, y }, shapeType, shapeColor);
       return;
     }
 
@@ -1313,460 +1397,73 @@ export default function DrawingTextEditor() {
 
   return (
     <div className="drawing-editor">
-      <div className="tab-bar">
-        <div className="tab-list" role="tablist" aria-label="Abas do editor">
-          {tabs.map((tab) => (
-            <div
-              key={tab.id}
-              role="tab"
-              aria-selected={tab.id === activeId}
-              className={`editor-tab ${tab.id === activeId ? 'active' : ''}`}
-              onClick={() => selectTab(tab.id)}
-              onDoubleClick={() => beginRename(tab)}
-              title="Duplo clique para renomear"
-            >
-              {editingId === tab.id ? (
-                <input
-                  ref={nameInputRef}
-                  className="tab-name-input"
-                  value={nameDraft}
-                  maxLength={24}
-                  aria-label="Nome da aba"
-                  onClick={(event) => event.stopPropagation()}
-                  onDoubleClick={(event) => event.stopPropagation()}
-                  onChange={(event) => setNameDraft(event.target.value)}
-                  onBlur={commitRename}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') {
-                      event.currentTarget.blur();
-                    } else if (event.key === 'Escape') {
-                      skipRenameCommitRef.current = true;
-                      setEditingId(null);
-                    }
-                  }}
-                />
-              ) : (
-                <span className="tab-name">{tab.name}</span>
-              )}
-              {tab.id === activeId && editingId !== tab.id && (
-                <button
-                  type="button"
-                  className="tab-icon-button"
-                  title="Renomear aba"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    beginRename(tab);
-                  }}
-                >
-                  <Pencil size={13} />
-                </button>
-              )}
-              {tabs.length > 1 && (
-                <button
-                  type="button"
-                  className="tab-icon-button"
-                  title="Fechar aba"
-                  onClick={(event) => closeTab(tab.id, event)}
-                >
-                  <X size={14} />
-                </button>
-              )}
-            </div>
-          ))}
-          <button
-            type="button"
-            className="tab-add"
-            onClick={addTab}
-            disabled={tabs.length >= MAX_TABS}
-            title={tabs.length >= MAX_TABS ? 'Máximo de 3 abas' : 'Nova aba'}
-          >
-            <Plus size={16} />
-          </button>
-        </div>
-         <button
-          type="button"
-          className="tool-button theme-toggle"
-          onClick={toggleTheme}
-          title={theme === 'dark' ? 'Tema claro' : 'Tema escuro'}
-          aria-label={theme === 'dark' ? 'Tema claro' : 'Tema escuro'}
-        >
-          {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
-        </button>
-      </div>
+      <EditorToolbar
+        activeId={activeId}
+        tabs={tabs}
+        theme={theme}
+        tool={tool}
+        setTool={setTool}
+        shapeType={shapeType}
+        setShapeType={setShapeType}
+        editingId={editingId}
+        nameDraft={nameDraft}
+        nameInputRef={nameInputRef}
+        setNameDraft={setNameDraft}
+        commitRename={commitRename}
+        setEditingId={setEditingId}
+        selectTab={selectTab}
+        beginRename={beginRename}
+        closeTab={closeTab}
+        addTab={addTab}
+        toggleTheme={toggleTheme}
+        undo={undo}
+        redo={redo}
+        clearCanvas={clearCanvas}
+        downloadImage={downloadImage}
+        lineWidth={lineWidth}
+        setLineWidth={setLineWidth}
+        fontSize={fontSize}
+        setFontSize={setFontSize}
+        colors={colors}
+        color={color}
+        setColor={setColor}
+        shapeColor={shapeColor}
+        setShapeColor={setShapeColor}
+        onColorPick={applyColorChoice}
+        isTyping={isTyping}
+        history={history}
+        historyStep={historyStep}
+      />
 
-      <div className="drawing-toolbar">
-        <div className="toolbar-group toolbar-tools">
-          <button
-            onClick={() => setTool('select')}
-            className={`tool-button ${tool === 'select' ? 'active' : ''}`}
-            title="Selecionar"
-            aria-label="Selecionar"
-          >
-            <MousePointer2 size={18} />
-          </button>
+      <EditorCanvasStage
+        shellRef={shellRef}
+        canvasRef={canvasRef}
+        tool={tool}
+        pan={pan}
+        zoom={zoom}
+        draw={draw}
+        stopDrawing={stopDrawing}
+        startDrawing={startDrawing}
+        selectionInfo={selectionInfo}
+        getCanvasPoint={getCanvasPoint}
+        setSelectedObject={setSelectedObject}
+        dragSelectionRef={dragSelectionRef}
+        resizeSelectionRef={resizeSelectionRef}
+        deleteSelectedObject={deleteSelectedObject}
+        beginEditingTextObject={beginEditingTextObject}
+        onWheel={handleWheelZoom}
+      />
 
-          <button
-            onClick={() => setTool('pan')}
-            className={`tool-button ${tool === 'pan' ? 'active' : ''}`}
-            title="Mover"
-            aria-label="Mover"
-          >
-            <Move size={18} />
-          </button>
-
-          <button
-            onClick={() => setTool('pen')}
-            className={`tool-button ${tool === 'pen' ? 'active' : ''}`}
-            title="Caneta"
-            aria-label="Caneta"
-          >
-            <Pencil size={18} />
-          </button>
-          <button
-            onClick={() => setTool('eraser')}
-            className={`tool-button ${tool === 'eraser' ? 'active' : ''}`}
-            title="Borracha"
-            aria-label="Borracha"
-          >
-            <Eraser size={18} />
-          </button>
-          <button
-            onClick={() => setTool('text')}
-            className={`tool-button ${tool === 'text' ? 'active' : ''}`}
-            title="Texto"
-            aria-label="Texto"
-          >
-            <Type size={18} />
-          </button>
-          <button
-            onClick={() => setTool('shape')}
-            className={`tool-button ${tool === 'shape' ? 'active' : ''}`}
-            title="Formas"
-            aria-label="Formas"
-          >
-            ▭
-          </button>
-
-          {tool === 'shape' && (
-            <div className="shape-selector" aria-label="Tipos de forma">
-              {[
-                { id: 'rectangle', label: '▭', name: 'Retângulo' },
-                { id: 'ellipse', label: '◯', name: 'Elipse' },
-                { id: 'line', label: '／', name: 'Linha' },
-                { id: 'square', label: '□', name: 'Quadrado' },
-                { id: 'outline-rectangle', label: '▢', name: 'Retângulo com borda' },
-                { id: 'diamond', label: '◇', name: 'Losango' },
-                { id: 'arrow', label: '→', name: 'Seta' },
-              ].map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  className={`shape-button ${shapeType === item.id ? 'active' : ''}`}
-                  title={item.name}
-                  aria-label={item.name}
-                  onClick={() => setShapeType(item.id)}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
-          )}
-
-          <div className="toolbar-divider" aria-hidden="true" />
-        </div>
-
-        <div className="toolbar-group toolbar-actions">
-          <button onClick={undo} className="tool-button" title="Desfazer" aria-label="Desfazer" disabled={isTyping || historyStep <= 0}>
-            <Undo size={18} />
-          </button>
-          <button onClick={redo} className="tool-button" title="Refazer" aria-label="Refazer" disabled={isTyping || historyStep >= history.length - 1}>
-            <Redo size={18} />
-          </button>
-          <button onClick={clearCanvas} className="button-clear" title="Limpar" aria-label="Limpar">
-            <Trash2 size={18} />
-          </button>
-          <button onClick={downloadImage} className="button-download" title="Baixar" aria-label="Baixar">
-            <Download size={18} />
-          </button>
-        </div>
-
-        <div className="toolbar-group toolbar-settings">
-          {tool === 'pen' && (
-            <div className="setting-group">
-              <label className="setting-label">Espessura</label>
-              <input
-                type="range"
-                min="1"
-                max="20"
-                value={lineWidth}
-                onChange={(e) => setLineWidth(Number(e.target.value))}
-                className="setting-input"
-              />
-              <span className="setting-value">{lineWidth}</span>
-            </div>
-          )}
-
-          {tool === 'text' && (
-            <div className="setting-group">
-              <label className="setting-label">Tamanho</label>
-              <input
-                type="range"
-                min="12"
-                max="72"
-                value={fontSize}
-                onChange={(e) => setFontSize(Number(e.target.value))}
-                className="setting-input"
-              />
-              <span className="setting-value">{fontSize}</span>
-            </div>
-          )}
-
-          <div className="color-picker-group">
-            <div className="color-swatches">
-              {colors.map((c) => (
-                <button
-                  key={c}
-                  onClick={() => {
-                    if (tool === 'shape') {
-                      setShapeColor(c);
-                    } else {
-                      setColor(c);
-                    }
-                  }}
-                  className={`color-swatch ${(tool === 'shape' ? shapeColor : color) === c ? 'active' : ''}`}
-                  style={{ backgroundColor: c }}
-                  title={c}
-                  aria-label={`Selecionar cor ${c}`}
-                />
-              ))}
-              <input
-                type="color"
-                value={tool === 'shape' ? shapeColor : color}
-                onChange={(e) => {
-                  if (tool === 'shape') {
-                    setShapeColor(e.target.value);
-                  } else {
-                    setColor(e.target.value);
-                  }
-                }}
-                className="color-input"
-                title="Escolher cor personalizada"
-                aria-label="Escolher cor personalizada"
-              />
-            </div>
-          </div>
-        </div>
-
-   
-      </div>
-
-      <div className="canvas-container">
-        <div
-          ref={shellRef}
-          className="canvas-shell"
-          onWheel={handleWheelZoom}
-          onMouseMove={draw}
-          onMouseUp={stopDrawing}
-          onMouseLeave={stopDrawing}
-        >
-          <div className="canvas-stage" style={{ transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})` }}>
-            <canvas
-              ref={canvasRef}
-              onMouseDown={startDrawing}
-              className={`canvas-element ${tool === 'pan' ? 'pan-mode' : ''} ${tool === 'select' ? 'select-mode' : ''}`}
-            />
-
-            {selectionInfo.object && (selectionInfo.object.type === 'shape' || selectionInfo.object.type === 'text') && selectionInfo.bounds && (
-              <>
-                <button
-                  type="button"
-                  className="selection-box"
-                  aria-label="Mover item selecionado"
-                  onMouseDown={(event) => {
-                    event.stopPropagation();
-                    const point = getCanvasPoint(event);
-                    setSelectedObject(selectionInfo.object.id);
-                    dragSelectionRef.current = {
-                      objectId: selectionInfo.object.id,
-                      startX: point.x,
-                      startY: point.y,
-                    };
-                  }}
-                  style={{
-                    left: `${selectionInfo.bounds.x - 10}px`,
-                    top: `${selectionInfo.bounds.y - 10}px`,
-                    width: `${selectionInfo.bounds.width + 20}px`,
-                    height: `${selectionInfo.bounds.height + 20}px`,
-                  }}
-                />
-
-                {selectionInfo.object.type === 'shape' && ['nw', 'ne', 'sw', 'se'].map((handle) => {
-                  const left =
-                    handle.includes('w')
-                      ? selectionInfo.bounds.x - 7
-                      : selectionInfo.bounds.x + selectionInfo.bounds.width - 7;
-                  const top =
-                    handle.includes('n')
-                      ? selectionInfo.bounds.y - 7
-                      : selectionInfo.bounds.y + selectionInfo.bounds.height - 7;
-
-                  return (
-                    <button
-                      key={handle}
-                      type="button"
-                      className="selection-handle"
-                      data-resize-handle={handle}
-                      aria-label={`Redimensionar ${handle}`}
-                      onMouseDown={(event) => {
-                        event.stopPropagation();
-                        const point = getCanvasPoint(event);
-                        resizeSelectionRef.current = {
-                          objectId: selectionInfo.object.id,
-                          handle,
-                          startX: point.x,
-                          startY: point.y,
-                          startBounds: { ...selectionInfo.bounds },
-                          startObject: { ...selectionInfo.object },
-                        };
-                      }}
-                      style={{
-                        left: `${left}px`,
-                        top: `${top}px`,
-                        cursor: handle === 'nw' || handle === 'se' ? 'nwse-resize' : 'nesw-resize',
-                      }}
-                    />
-                  );
-                })}
-
-                <button
-                  type="button"
-                  className="selection-delete-button"
-                  aria-label="Excluir item selecionado"
-                  onClick={deleteSelectedObject}
-                  style={{
-                    left: `${selectionInfo.bounds.x + selectionInfo.bounds.width + 10}px`,
-                    top: `${selectionInfo.bounds.y - 8}px`,
-                  }}
-                >
-                  ×
-                </button>
-
-                {selectionInfo.object.type === 'text' && (
-                  <button
-                    type="button"
-                    className="selection-edit-button"
-                    aria-label="Editar texto selecionado"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      beginEditingTextObject(selectionInfo.object);
-                    }}
-                    style={{
-                      left: `${selectionInfo.bounds.x + selectionInfo.bounds.width + 10}px`,
-                      top: `${selectionInfo.bounds.y + 20}px`,
-                    }}
-                  >
-                    <Pencil size={11} />
-                  </button>
-                )}
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-
-      <div className="zoom-controls" aria-label="Controle de zoom do canvas">
-        <button
-          type="button"
-          className="zoom-button"
-          onClick={() => {
-            const rect = shellRef.current?.getBoundingClientRect();
-            handleZoom(zoom - 0.1, rect ? rect.left + rect.width / 2 : window.innerWidth / 2, rect ? rect.top + rect.height / 2 : window.innerHeight / 2);
-          }}
-          aria-label="Diminuir zoom"
-        >
-          −
-        </button>
-
-        {isZoomEditing ? (
-          <input
-            className="zoom-input"
-            type="number"
-            min="50"
-            max="400"
-            step="5"
-            value={zoomInputValue}
-            onChange={(event) => {
-              setZoomInputValue(event.target.value);
-            }}
-            onBlur={() => {
-              const cleaned = zoomInputValue.trim();
-              if (cleaned === '') {
-                setZoomInputValue(String(Math.round(zoom * 100)));
-              } else {
-                const nextValue = Number(cleaned);
-                if (Number.isFinite(nextValue)) {
-                  const normalized = clampZoom(nextValue / 100);
-                  const rect = shellRef.current?.getBoundingClientRect();
-                  handleZoom(normalized, rect ? rect.left + rect.width / 2 : window.innerWidth / 2, rect ? rect.top + rect.height / 2 : window.innerHeight / 2);
-                  setZoomInputValue(String(Math.round(normalized * 100)));
-                }
-              }
-              setIsZoomEditing(false);
-            }}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') {
-                event.preventDefault();
-                const cleaned = zoomInputValue.trim();
-                if (cleaned === '') {
-                  setZoomInputValue(String(Math.round(zoom * 100)));
-                  setIsZoomEditing(false);
-                  return;
-                }
-
-                const nextValue = Number(cleaned);
-                if (Number.isFinite(nextValue)) {
-                  const normalized = clampZoom(nextValue / 100);
-                  const rect = shellRef.current?.getBoundingClientRect();
-                  handleZoom(normalized, rect ? rect.left + rect.width / 2 : window.innerWidth / 2, rect ? rect.top + rect.height / 2 : window.innerHeight / 2);
-                  setZoomInputValue(String(Math.round(normalized * 100)));
-                }
-                setIsZoomEditing(false);
-              }
-
-              if (event.key === 'Escape') {
-                setZoomInputValue(String(Math.round(zoom * 100)));
-                setIsZoomEditing(false);
-              }
-            }}
-            autoFocus
-            aria-label="Zoom em porcentagem"
-          />
-        ) : (
-          <button
-            type="button"
-            className="zoom-value"
-            onClick={() => {
-              setZoomInputValue(String(Math.round(zoom * 100)));
-              setIsZoomEditing(true);
-            }}
-            aria-label="Editar zoom"
-          >
-            {Math.round(zoom * 100)}%
-          </button>
-        )}
-
-        <button
-          type="button"
-          className="zoom-button"
-          onClick={() => {
-            const rect = shellRef.current?.getBoundingClientRect();
-            handleZoom(zoom + 0.1, rect ? rect.left + rect.width / 2 : window.innerWidth / 2, rect ? rect.top + rect.height / 2 : window.innerHeight / 2);
-          }}
-          aria-label="Aumentar zoom"
-        >
-          +
-        </button>
-      </div>
+      <ZoomControls
+        shellRef={shellRef}
+        zoom={zoom}
+        zoomInputValue={zoomInputValue}
+        setZoomInputValue={setZoomInputValue}
+        isZoomEditing={isZoomEditing}
+        setIsZoomEditing={setIsZoomEditing}
+        clampZoom={clampZoom}
+        handleZoom={handleZoom}
+      />
 
       {isTyping && (
         <div className="typing-instructions">
