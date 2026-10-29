@@ -1,6 +1,6 @@
 # draw-tx
 
-Editor de desenho e texto em navegador, com visual compacto e inspirados em fluxos de design tools como Figma. O projeto foi reestruturado para facilitar manutenção, com componentes separados por responsabilidade e uma base mais próxima de boas práticas de arquitetura front-end.
+Editor de desenho e texto em navegador com visual compacto.
 
 <br>
 <img src="public/images/draw-tx-website.png" alt="Screenshot do editor" style="width:auto; height:auto;" align="center">
